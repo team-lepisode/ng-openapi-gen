@@ -90,17 +90,28 @@ export class NgOpenApiGen {
         if (generateServices) {
           this.write('service', service, service.fileName, 'services');
         }
-        for (const op of service.operations) {
-          for (const variant of op.variants) {
-            this.write('fn', variant, variant.importFile, variant.importPath);
-          }
-        }
+
       }
+
+      const functions = services.reduce((acc, service) => [
+        ...acc,
+        ...service.operations.reduce((opAcc, operation) => [
+          ...opAcc,
+          ...operation.variants
+        ], [])
+      ], []);
+
+      for (const fn of functions) {
+        this.write('fn', fn, fn.importFile, fn.importPath);
+      }
+
+
 
       // Context object passed to general templates
       const general = {
         services: services,
-        models: models
+        models: models,
+        functions: functions
       };
 
       // Generate the general files
@@ -120,6 +131,9 @@ export class NgOpenApiGen {
       const modelIndex = this.globals.modelIndexFile || this.options.indexFile ? new ModelIndex(models, this.options) : null;
       if (this.globals.modelIndexFile) {
         this.write('modelIndex', { ...general, modelIndex }, this.globals.modelIndexFile);
+      }
+      if (this.globals.functionIndexFile) {
+        this.write('functionIndex', general, this.globals.functionIndexFile);
       }
       if (generateServices && this.globals.serviceIndexFile) {
         this.write('serviceIndex', general, this.globals.serviceIndexFile);
@@ -367,7 +381,7 @@ export async function runNgOpenApiGen() {
       }
     }) as OpenAPIObject;
 
-    const {excludeTags = [], excludePaths = [], includeTags = []} = options;
+    const { excludeTags = [], excludePaths = [], includeTags = [] } = options;
     openApi.paths = filterPaths(openApi.paths, excludeTags, excludePaths, includeTags);
 
     const gen = new NgOpenApiGen(openApi, options);
@@ -383,7 +397,7 @@ export function filterPaths(paths: OpenAPIObject['paths'], excludeTags: Options[
   paths = JSON.parse(JSON.stringify(paths));
   const filteredPaths: OpenAPIObject['paths'] = {};
   for (const key in paths) {
-    if (!paths.hasOwnProperty(key)) continue ;
+    if (!paths.hasOwnProperty(key)) continue;
 
     if (excludePaths?.includes(key)) {
       console.log(`Path ${key} is excluded by excludePaths`);
@@ -403,7 +417,7 @@ export function filterPaths(paths: OpenAPIObject['paths'], excludeTags: Options[
         delete paths[key]?.[method];
 
         // if path has no method left then "should remove"
-        if (Object.keys(paths[key]).length === 0 ) {
+        if (Object.keys(paths[key]).length === 0) {
           shouldRemovePath = true;
           break;
         }
